@@ -255,8 +255,8 @@ mac_array mac_array_1(
     // WEIGHT_ROM
     //======================================================== 
 
-    [7:0] weight_data;
-wire [12:0] conv_addr; //tie with mac_array.v
+    .weight_data (weight_data), //[7:0]
+    .conv_addr   (conv_addr) //[12:0]
 
 );
 
@@ -276,7 +276,7 @@ weight_rom weights(
     .clk            (cam_pclk),
     .rst_n          (rst_n),
     .conv_layer_sel (conv_layer_sel), //[1:0] 00=CONV1, 01=CONV2, 10=CONV3, 11=FC
-    .conv_addr      (),               //[12:0] conv address space (max 5831)
+    .conv_addr      (conv_addr),               //[12:0] conv address space (max 5831)
     .fc_addr        (),               //[7:0] separate addr for fc pROM (max 192)
 
     //OUT

@@ -52,7 +52,15 @@ module mac_array
 
 );
 
-//use assign to ^^^^^ tie them to 2 variables for cleaner code and for din
+//generic temp variables which will be assigned to the relevant BSRAM FEATURE
+//MAP variables/wires based on the CONV layer we're on so multiple if 
+//statements arent required in the FSM
+
+wire       map_rd_en;
+wire       map_wr_en;
+wire [7:0] map_dout; //feature map output data
+wire [7:0] map_din;  //feature map input data
+
 
 reg signed [31:0] result [0:3];     //array of 4, 32 bit results from MAC
 reg signed [31:0] maxpool_result;
@@ -72,7 +80,6 @@ reg [1:0] pool_index;   // keeps count of the 0-3 (4) pool positions
 reg [3:0] mac_index; //of the 9 MACs which one we're trying to get data for
 
 //calls conv_acc.v as needed
-//BSRAM reads/writes
 
 
 //Feature map A — 48×48×8  = 18,432 bytes  (Conv1+ReLU+Pool output) 
@@ -130,9 +137,41 @@ reg [3:0] mac_index; //of the 9 MACs which one we're trying to get data for
 
         case (conv_layer_sel)
 
-            2'b00: begin frame = 48; num_filters = 8; end
-            2'b01: begin frame = 24; num_filters = 16; end
-            2'b10: begin frame = 12; num_filters = 32; end 
+            2'b00: begin //96x96 -> 48x48x8
+
+                frame = 48; 
+                num_filters = 8; 
+
+                assign map_rd_en = resize_rd_en; //96x96   rd
+                assign map_wr_en = map_a_wr_en;  //48x48x8 wr
+                assign map_din   = resize_dout;  //96x96 -> 
+                assign map_dout  = map_a_din;    //-> 48x48
+
+            end
+
+            2'b01: begin //48x48x8 -> 24x24x16
+    
+                frame = 24; 
+                num_filters = 16; 
+
+                assign map_rd_en = map_a_rd_en;
+                assign map_wr_en = map_b_wr_en;
+                assign map_din   = map_a_dout;  
+                assign map_dout  = map_b_din; 
+            
+            end
+                    
+            2'b10: begin //24x24x16 -> 12x12x32
+
+                frame = 12; 
+                num_filters = 32; 
+
+                assign map_rd_en = map_b_rd_en;
+                assign map_wr_en = map_c_wr_en;
+                assign map_din   = map_b_dout;  
+                assign map_dout  = map_c_din; 
+
+            end 
 
         endcase
 
@@ -219,6 +258,10 @@ reg [3:0] mac_index; //of the 9 MACs which one we're trying to get data for
 
 //addr = y * 96 + x
 
+// map_rd_en;
+// map_wr_en;
+// map_dout; //feature map output data
+// map_din;  //feature map input data
 
                 end
 
@@ -253,9 +296,6 @@ reg [3:0] mac_index; //of the 9 MACs which one we're trying to get data for
                     //[ 3  7 ]
                     //[ 1  5 ]  →  7
 
-//write the result into BSRAM feature map
-//addr = filter * (48*48) + oy * 48 + ox
-
                     pool_result <= result[0];
 
                     if(result[1] > pool_result) pool_result <= result[1];
@@ -268,7 +308,12 @@ reg [3:0] mac_index; //of the 9 MACs which one we're trying to get data for
 
                 FSM_WRITE: begin
                     
-                
+                    //write the result into BSRAM feature map
+                    //addr = filter * (48*48) + oy * 48 + ox
+
+                    map_wr_en <= 1'b1; //enable writing to BSRAM MAP
+                    //calculate addr location
+                    //access addr location
 
                 end
 
