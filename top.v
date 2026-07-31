@@ -172,7 +172,7 @@ wire resize_rd_en;       //output -> ceb 96x96
     );
 
 //========================================================
-// CNN ACCELERATOR 
+// CNN 
 //======================================================== 
 
 wire conv_en;
@@ -261,6 +261,61 @@ mac_array mac_array_1(
 
     .weight_data (weight_data), //[7:0] 
     .conv_addr   (conv_addr) //[12:0] 
+
+);
+
+global_avg_pool avg_pool(
+
+    .rst_n (rst_n),
+    .clk (cam_pclk),
+
+    .gap_en (),       // start signal from cnn_top IN
+    .gap_done (), // done signal to cnn_top OUT
+
+    //========================================================
+    // FEATURE MAP C BSRAM (12x12x32)
+    //========================================================
+
+    .map_c_dout (),      // input <- dout MAP C [7:0]
+    .map_c_rd_addr (),  // output -> adb MAP C [12:0]
+    .map_c_rd_en (),       // output -> ceb MAP C
+
+    //========================================================
+    // READ INTERFACE -> classifier.v
+    //========================================================
+
+    .gap_addr (),   // IN [4:0]
+    .gap_data ()   // OUT [7:0]
+
+);
+
+classifier fc_layer(
+
+    .rst_n  (),
+    .clk    (),
+
+    .fc_en  (),        // start signal from cnn_top
+    .fc_done(),  // done signal to cnn_top
+
+    //========================================================
+    // GLOBAL_AVG_POOL READ INTERFACE
+    //========================================================
+
+    .gap_addr (),  // request channel 0-31 [4:0] OUT
+    .gap_data (),  // averaged value for that channel IN
+
+    //========================================================
+    // WEIGHT_ROM READ INTERFACE (FC weights)
+    //========================================================
+
+    output [7:0] fc_addr,     // weight address (0-191)
+    input  [7:0] weight_data, // weight value (pROM, 1-cycle latency)
+
+    //========================================================
+    // RESULT
+    //========================================================
+
+    output reg [2:0] class_result  // argmax winner, 0-5
 
 );
 
