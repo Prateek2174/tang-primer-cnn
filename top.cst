@@ -1,84 +1,98 @@
-module dvp_capture
-(
-    input rst_n,
-    input pclk,
-    input[7:0] input_data,
-    input de_i, //HREF or valid data
+//Physical Constraints file
+//Part Number: GW2A-LV18PG256C8/I7
+//Device: GW2A-18
+//
+// Pin locations sourced from sipeed/TangPrimer-20K-example on GitHub:
+//   - CMOS block: verbatim match between Cam2HDMI and Cam2lcd examples
+//     (two independent projects agree -- high confidence these are fixed
+//     by the Dock PCB routing)
+//   - UART block: from UART/UART_HELLO example
+//   - clk/rst_n: Cam2HDMI and UART_HELLO examples disagree on both the
+//     voltage for clk (2.5V vs 3.3V) and the physical pin for rst_n
+//     (T10 vs T5). Went with Cam2HDMI's values (2.5V / T10) since it's
+//     the closer match to this project (also uses the camera). If clk
+//     fails to meet timing or Gowin flags a bank conflict, re-check
+//     against the Dock schematic (Tang_Primer_20K_Dock-3713 or -3714,
+//     whichever board you actually have) before assuming these are wrong.
+//
+// NOT YET FILLED IN -- confirm before synthesizing:
+//   - led_1 / led_2 pin locations (no confirmed source found yet)
+//   - btn pin location, if you add one
+//   - PLL clkout wiring (Gowin_PLL instance in top.v currently only
+//     drives cam_clk from clkout0 -- unused outputs clkout1-4)
 
-    output reg[7:0] y_data,
-    output reg[7:0] cbcr_data, //alternating bytes U/V
+//========================================================
+// SYSTEM CLOCK / RESET
+//========================================================
 
-//    output reg[15:0] out_data,
+IO_LOC  "clk"    H11;
+IO_PORT "clk"    IO_TYPE=LVCMOS25 PULL_MODE=NONE BANK_VCCIO=2.5;
 
-    output reg      hblank,
-    output reg      de_o
-    
-);
-//get 16 bits of data and then separate into y_data = Y and crcb_data = UV
+IO_LOC  "rst_n"  T10;
+IO_PORT "rst_n"  IO_TYPE=LVCMOS33 PULL_MODE=NONE BANK_VCCIO=3.3;
 
-reg[7:0] previous_byte;
-reg byte_toggle;
+//========================================================
+// OV5640 DVP camera -- Tang Primer 20K Dock
+//========================================================
 
-//record incoming byte
-always@(posedge pclk or negedge rst_n)
-begin
-    if(!rst_n)
-        previous_byte <= 8'd0;
-    else
-        previous_byte <= input_data;
-end
+// SCCB config bus (I2C-like) -- driven by i2c_bitbang_cam.v
+IO_LOC  "cam_scl"   F14;
+IO_PORT "cam_scl"   IO_TYPE=LVCMOS25 PULL_MODE=NONE DRIVE=8 BANK_VCCIO=2.5;
+IO_LOC  "cam_sda"   F16;
+IO_PORT "cam_sda"   IO_TYPE=LVCMOS25 PULL_MODE=NONE DRIVE=8 BANK_VCCIO=2.5;
 
-//as long as we have posedge of pclk and data is valid -> toggle
-always@(posedge pclk or negedge rst_n)
-begin
-    if(!rst_n)
-        byte_toggle <= 0;
-    else if(de_i)
-        byte_toggle <= ~byte_toggle;
-    else
-        byte_toggle <= 0;
-end
+// Camera -> FPGA sync + pixel clock (inputs)
+IO_LOC  "cam_vsync" G15;
+IO_PORT "cam_vsync" IO_TYPE=LVCMOS25 PULL_MODE=NONE BANK_VCCIO=2.5;
+IO_LOC  "cam_href"  G14;
+IO_PORT "cam_href"  IO_TYPE=LVCMOS25 PULL_MODE=NONE BANK_VCCIO=2.5;
+IO_LOC  "cam_pclk"  F13;
+IO_PORT "cam_pclk"  IO_TYPE=LVCMOS25 PULL_MODE=NONE BANK_VCCIO=2.5;
 
-//as long as its not on reset -> if data is valid and byte has toggled (which means we have 2 bytes)
-always@(posedge pclk or negedge rst_n)
-begin
-    if(!rst_n)
-        de_o <= 1'b0;
-    else if(de_i && byte_toggle)
-        de_o <= 1'b1;
-    else
-        de_o <= 1'b0;
-end
+// FPGA -> camera master clock (~24MHz, generated via PLL)
+IO_LOC  "cam_xclk"  G12;
+IO_PORT "cam_xclk"  IO_TYPE=LVCMOS25 PULL_MODE=NONE DRIVE=8 BANK_VCCIO=2.5;
 
-always@(posedge pclk or negedge rst_n)
-begin
-    if(!rst_n)
-        hblank <= 1'b0;
-    else
-        hblank <= de_i;
-end
+// Control (outputs)
+IO_LOC  "cam_rst_n" L13;
+IO_PORT "cam_rst_n" IO_TYPE=LVCMOS25 PULL_MODE=NONE DRIVE=8 BANK_VCCIO=2.5;
+IO_LOC  "cam_pwdn"  C10;
+IO_PORT "cam_pwdn"  IO_TYPE=LVCMOS33 PULL_MODE=NONE DRIVE=8 BANK_VCCIO=3.3;
 
-//output y_data = Y and crcb_data = U or V otherwise no change
-always@(posedge pclk or negedge rst_n)
-begin  
-    if(!rst_n) begin
+// 8-bit pixel data bus (inputs)
+IO_LOC  "cam_data[0]" T12;
+IO_PORT "cam_data[0]" IO_TYPE=LVCMOS25 PULL_MODE=NONE BANK_VCCIO=2.5;
+IO_LOC  "cam_data[1]" T11;
+IO_PORT "cam_data[1]" IO_TYPE=LVCMOS25 PULL_MODE=NONE BANK_VCCIO=2.5;
+IO_LOC  "cam_data[2]" P11;
+IO_PORT "cam_data[2]" IO_TYPE=LVCMOS25 PULL_MODE=NONE BANK_VCCIO=2.5;
+IO_LOC  "cam_data[3]" R11;
+IO_PORT "cam_data[3]" IO_TYPE=LVCMOS25 PULL_MODE=NONE BANK_VCCIO=2.5;
+IO_LOC  "cam_data[4]" M15;
+IO_PORT "cam_data[4]" IO_TYPE=LVCMOS25 PULL_MODE=NONE BANK_VCCIO=2.5;
+IO_LOC  "cam_data[5]" M14;
+IO_PORT "cam_data[5]" IO_TYPE=LVCMOS25 PULL_MODE=NONE BANK_VCCIO=2.5;
+IO_LOC  "cam_data[6]" J16;
+IO_PORT "cam_data[6]" IO_TYPE=LVCMOS25 PULL_MODE=NONE BANK_VCCIO=2.5;
+IO_LOC  "cam_data[7]" J14;
+IO_PORT "cam_data[7]" IO_TYPE=LVCMOS25 PULL_MODE=NONE BANK_VCCIO=2.5;
 
-        y_data <= 8'd0;
-        cbcr_data <= 8'd0;
+//========================================================
+// UART TX -- from sipeed UART_HELLO example
+//========================================================
 
-//        out_data <= 16'd0;
+IO_LOC  "uart_tx_pin" M11;
+IO_PORT "uart_tx_pin" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
 
-    end else if(de_i && byte_toggle) begin
+//========================================================
+// LEDs -- confirmed directly from the Tang_Primer_20K_Dock-3713
+// schematic (pdftotext extraction): net names "Orange_LED0" (pin C13)
+// and "Orange_LED1" (pin A13), both on the Dock's onboard 3.3V LED
+// bank. Matches Cam2HDMI's state_led[0]/state_led[1] exactly --
+// cross-confirmed by an independent source, not just copied.
+//========================================================
 
-        y_data <= previous_byte;
-        cbcr_data <= input_data;
-//        y_data <= 8'hFF;
-//        cbcr_data <= 8'hFF;
-        
-//        out_data <= {input_data, previous_byte};
-
-    end
-end
-
-
-endmodule
+IO_LOC  "led_1" C13;
+IO_PORT "led_1" IO_TYPE=LVCMOS33 PULL_MODE=NONE DRIVE=8 BANK_VCCIO=3.3;
+IO_LOC  "led_2" A13;
+IO_PORT "led_2" IO_TYPE=LVCMOS33 PULL_MODE=NONE DRIVE=8 BANK_VCCIO=3.3;
