@@ -1,4 +1,4 @@
-# Axon — FPGA Hand-Gesture CNN Accelerator
+# FPGA CNN Accelerator
 
 A from-scratch CNN inference engine running entirely in Verilog on a **Tang Primer 20K**
 (Gowin GW2A-18), with no soft-core CPU. An OV5640 camera feeds a small convolutional
