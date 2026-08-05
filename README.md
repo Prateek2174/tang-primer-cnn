@@ -92,6 +92,24 @@ flowchart TB
 - **Toolchain**: Gowin EDA V1.9.12
 - **PC link**: UART @ 921600 baud, USB-serial adapter
 
+## Design notes
+
+Working notes from the design process — memory addressing math, the MAC-array FSM,
+pipeline sketches, and sizing calculations for the feature-map BRAMs.
+
+| | |
+|---|---|
+| ![Pipeline overview](docs/notes/02-pipeline-overview.jpg) | ![Feature map memory layout](docs/notes/01-feature-map-memory-layout.jpg) |
+| Pipeline overview: OV5640 → `dvp_capture` → `preprocessor` → UART/BSRAM → PC | Feature map BSRAM layout (48×48×8, 24×24×16, 12×12×32) and the conv core/accumulator split |
+| ![Preprocessor scaling math](docs/notes/03-preprocessor-scaling-math.jpg) | ![ReLU, MaxPool, conv dimension flow](docs/notes/04-relu-maxpool-conv-dims.jpg) |
+| `preprocessor.v` scaling math — mapping 640×480 input coordinates to the 96×96 output grid | ReLU/MaxPool logic and the CONV1→CONV2→CONV3 channel/dimension flow (96×96×1 → 48×48×8 → 24×24×16 → 12×12×32) |
+| ![BSRAM addressing](docs/notes/05-bsram-addressing.jpg) | ![FPGA block diagram and feature map questions](docs/notes/06-fpga-block-diagram-feature-maps.jpg) |
+| BSRAM pixel addressing (`addr = y*96 + x`) and the 640×480 DVP→FIFO→BSRAM→display path | Early FPGA/RAM/MCU block sketch, plus working notes on per-feature-map addressing |
+| ![mux_array.v FSM, first pass](docs/notes/07-mac-array-fsm-v1.jpg) | ![Weight ROM sizing](docs/notes/08-weight-rom-sizing.jpg) |
+| `mac_array.v` FSM, first pass: `IDLE → COORD → ADDR → MAC → POOL → DONE` | Weight ROM byte counts and base addresses per conv layer (CONV1/2/3) |
+| ![mux_array.v FSM, refined](docs/notes/09-mac-array-fsm-v2.jpg) | |
+| `mac_array.v` FSM, refined: adds the per-channel accumulate loop and pool-index increment logic | |
+
 ## Status
 
 Camera bring-up (SCCB config, DVP capture, decimation, UART streaming) is verified
