@@ -92,6 +92,18 @@ flowchart TB
 - **Toolchain**: Gowin EDA V1.9.12
 - **PC link**: UART @ 921600 baud, USB-serial adapter
 
+## Pipeline test log
+
+| Pipeline | Expected | Actual |
+|---|---|---|
+| Synthetic pattern → `Gowin_SDPB` (96×96) → UART | ![](docs/tests/expected-checker8.png) | ![](docs/tests/01-actual-bsram-only.png) |
+| Synthetic pattern → `preprocessor` (pre-fix) → `Gowin_SDPB` → UART | ![](docs/tests/expected-checker8.png) | ![](docs/tests/02-actual-preprocessor-buggy.png) |
+| Synthetic pattern → `preprocessor` (fixed) → `Gowin_SDPB` → UART | ![](docs/tests/expected-checker4.png) | ![](docs/tests/03-actual-preprocessor-fixed.png) |
+| Real camera → `dvp_capture` → `preprocessor` → `Gowin_SDPB` → UART | — | ![](docs/tests/04-actual-realcam-preprocessor-bsram.png) |
+| Synthetic pattern (continuous, unfrozen) → `preprocessor` → `Gowin_SDPB` → UART | ![](docs/tests/expected-checker8.png) | ![](docs/tests/05-actual-continuous-tearing.png) |
+| Real camera → `dvp_capture` → `cam_line_buffer_30rows` → UART (close / medium / far) | — | ![](docs/tests/06-actual-realcam-linebuffer-close.png) ![](docs/tests/06-actual-realcam-linebuffer-medium.png) ![](docs/tests/06-actual-realcam-linebuffer-far.png) |
+| Synthetic pattern (real `cam_pclk`) → `preprocessor` → `cam_line_buffer_30rows` (96×96) → UART | ![](docs/tests/expected-checker4.png) | ![](docs/tests/07-actual-synthetic-vs-real-comparison.png) |
+
 ## Design notes
 
 Working notes from the design process — memory addressing math, the MAC-array FSM,

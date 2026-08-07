@@ -9,8 +9,9 @@ module preprocessor
     input wire href,
     input wire vsync,
 
-    output reg      resize_en,
-    output reg[7:0] y_resize
+    output reg       resize_en,
+    output reg [7:0] y_resize,
+    output reg [13:0] resize_wr_addr //write address into the 96x96 frame buffer
 
 );
 
@@ -25,6 +26,11 @@ module preprocessor
 
     reg [2:0] h_phase;
     reg [2:0] v_phase;
+
+    //current position within the 96x96 output grid -- increments once
+    //per KEPT pixel, not once per incoming pixel (unlike hcount/vcount)
+    reg [6:0] out_x; //0-95
+    reg [6:0] out_y; //0-95
 
     //========================================================
     // Keep count of current pixel location
@@ -87,13 +93,31 @@ module preprocessor
 
             resize_en <= 1'b0;
             y_resize <= 8'd0;
+            resize_wr_addr <= 14'd0;
+            out_x <= 0;
+            out_y <= 0;
+
+        end else if (vsync) begin
+
+            resize_en <= 1'b0;
+            resize_wr_addr <= 14'd0;
+            out_x <= 0;
+            out_y <= 0;
 
         end else begin
 
-            if(data_en && href && h_phase == 0 && v_phase == 0) begin
-    
+            if(data_en && href && h_phase == 0 && v_phase == 0 && hcount < (OUT_SIZE * SCALE_H)) begin
+
                 resize_en <= 1'b1;
                 y_resize <= y_data - 8'd128;
+                resize_wr_addr <= out_y * OUT_SIZE + out_x;
+
+                if (out_x == OUT_SIZE - 1) begin
+                    out_x <= 0;
+                    out_y <= out_y + 1'b1;
+                end else begin
+                    out_x <= out_x + 1'b1;
+                end
 
             end else begin
 
