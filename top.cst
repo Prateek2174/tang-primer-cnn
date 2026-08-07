@@ -28,6 +28,11 @@
 IO_LOC  "clk"    H11;
 IO_PORT "clk"    IO_TYPE=LVCMOS25 PULL_MODE=NONE BANK_VCCIO=2.5;
 
+// T10 is the physical reset button trace on the Primer 20K -- its
+// dedicated function is SSPI (Slave SPI), separate from the MSPI
+// function used for external-flash auto-boot. Enable "release SSPI
+// pins for regular IO" in Project -> Configuration -> Dual-Purpose Pin
+// before this will place successfully.
 IO_LOC  "rst_n"  T10;
 IO_PORT "rst_n"  IO_TYPE=LVCMOS33 PULL_MODE=NONE BANK_VCCIO=3.3;
 
@@ -56,6 +61,8 @@ IO_PORT "cam_xclk"  IO_TYPE=LVCMOS25 PULL_MODE=NONE DRIVE=8 BANK_VCCIO=2.5;
 // Control (outputs)
 IO_LOC  "cam_rst_n" L13;
 IO_PORT "cam_rst_n" IO_TYPE=LVCMOS25 PULL_MODE=NONE DRIVE=8 BANK_VCCIO=2.5;
+// Same SSPI dual-purpose-pin situation as rst_n above -- requires the
+// same "release SSPI pins" Configuration setting to place successfully.
 IO_LOC  "cam_pwdn"  C10;
 IO_PORT "cam_pwdn"  IO_TYPE=LVCMOS33 PULL_MODE=NONE DRIVE=8 BANK_VCCIO=3.3;
 
@@ -81,18 +88,36 @@ IO_PORT "cam_data[7]" IO_TYPE=LVCMOS25 PULL_MODE=NONE BANK_VCCIO=2.5;
 // UART TX -- from sipeed UART_HELLO example
 //========================================================
 
+// NOTE: M11 lands in Bank 2 per Gowin's own synthesis error (contradicts
+// the UG110 pinout spreadsheet, which said Bank 4 -- trusting the tool
+// here). Bank 2 is locked to 2.5V by the cross-validated camera block,
+// so uart_tx_pin must match that voltage rather than the 3.3V the
+// UART_HELLO example used (that example didn't share a bank with any
+// camera pins, so its 3.3V choice doesn't carry over here).
+// CAVEAT: most USB-UART adapters expect 3.3V/5V logic on RX. 2.5V TX
+// often still registers correctly, but if you get no/garbled data on
+// the PC side after confirming baud rate is correct, this voltage
+// mismatch is the likely cause -- pick a genuinely different pin via
+// Gowin's floorplanner/pin assignment view instead.
 IO_LOC  "uart_tx_pin" M11;
-IO_PORT "uart_tx_pin" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+IO_PORT "uart_tx_pin" IO_TYPE=LVCMOS25 PULL_MODE=UP DRIVE=8 BANK_VCCIO=2.5;
 
 //========================================================
-// LEDs -- confirmed directly from the Tang_Primer_20K_Dock-3713
-// schematic (pdftotext extraction): net names "Orange_LED0" (pin C13)
-// and "Orange_LED1" (pin A13), both on the Dock's onboard 3.3V LED
-// bank. Matches Cam2HDMI's state_led[0]/state_led[1] exactly --
-// cross-confirmed by an independent source, not just copied.
+// DEBUG LED -- confirmed C13 = LED0 (Orange_LED0 in the Dock-3713
+// schematic). C13 is the dedicated DONE pin -- enable "Use DONE as
+// regular IO" in Project -> Configuration -> Dual-Purpose Pin before
+// this will place successfully (same fix pattern as SSPI for rst_n).
+// Tied directly to cam_vsync in top.v to test whether the camera is
+// producing any sync signal at all, independent of the UART chain.
 //========================================================
 
-IO_LOC  "led_1" C13;
+IO_LOC  "led_0" C13;
+IO_PORT "led_0" IO_TYPE=LVCMOS33 PULL_MODE=NONE DRIVE=8 BANK_VCCIO=3.3;
+
+// A13 = Orange_LED1 in the Dock-3713 schematic. A13 is the dedicated
+// READY pin -- enable "Use READY as regular IO" in Configuration ->
+// Dual-Purpose Pin before this will place successfully. Tied to
+// cam_pclk to check whether the camera's pixel clock is genuinely
+// toggling (dim/half-bright LED) vs stuck (solid bright or dark).
+IO_LOC  "led_1" A13;
 IO_PORT "led_1" IO_TYPE=LVCMOS33 PULL_MODE=NONE DRIVE=8 BANK_VCCIO=3.3;
-IO_LOC  "led_2" A13;
-IO_PORT "led_2" IO_TYPE=LVCMOS33 PULL_MODE=NONE DRIVE=8 BANK_VCCIO=3.3;

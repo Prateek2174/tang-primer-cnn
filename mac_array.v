@@ -2,7 +2,7 @@ module mac_array
 (
     input rst_n,
     input clk,
-    input reg [1:0] conv_layer_sel, //i need to know which conv layer im on
+    input [1:0] conv_layer_sel, //i need to know which conv layer im on
                                     // 2'b00 = CONV1
                                     // 2'b01 = CONV2
                                     // 2'b10 = CONV3

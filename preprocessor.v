@@ -106,7 +106,7 @@ module preprocessor
 
         end else begin
 
-            if(data_en && href && h_phase == 0 && v_phase == 0) begin
+            if(data_en && href && h_phase == 0 && v_phase == 0 && hcount < (OUT_SIZE * SCALE_H)) begin
 
                 resize_en <= 1'b1;
                 y_resize <= y_data - 8'd128;
