@@ -163,21 +163,8 @@ reg [4:0] channel_index; //keep count of current channel based on the CONV layer
 
     always @(*) begin
 
-        // Safe defaults for every signal this block can drive, BEFORE the
-        // case statement -- standard idiom for a case-based mux. Without
-        // this, any signal not touched by a given branch (e.g. map_a_wr_en
-        // during CONV2/CONV3, since only ONE layer's wr_en is set per
-        // branch) infers a latch instead of clean combinational logic --
-        // confirmed by synthesis for resize_rd_en, and the same structural
-        // gap existed for map_a/b/c_wr_en, map_a/b_rd_en, map_din, and
-        // num_channels too (not yet flagged individually only because the
-        // map_wr_en multi-driver error below was stopping deeper analysis).
-        // map_wr_en, map_rd_en, and map_dout are deliberately NOT defaulted
-        // here -- they're owned exclusively by the clocked FSM, this block
-        // only ever reads them (assigning map_wr_en here caused the actual
-        // multi-driver error; the ORIGINAL code had the identical bug on
-        // map_dout too, in its old default case -- just not yet reported,
-        // most likely because synthesis was still stuck on map_wr_en).
+        // default every signal this block drives so none of them infer a
+        // latch. map_wr_en/map_rd_en/map_dout excluded -- owned by the FSM.
 
         frame = 0;
         num_filters = 0;
@@ -316,16 +303,8 @@ reg [4:0] channel_index; //keep count of current channel based on the CONV layer
     wire mac_valid = (mac_x >= 0) && (mac_x < in_width) && (mac_y >= 0) && (mac_y < in_width); //is the next 9 MAC pixel valid
     assign map_rd_addr = mac_valid ? (channel_index * in_width * in_width + mac_y * in_width + mac_x) : 15'd0;  // address doesn't matter if invalid
 
-    // Documented, known tradeoff from earlier training work (see model.py's
-    // docstring): when mac_valid=0, map_rd_addr defaults to address 0 of
-    // the CURRENT channel instead of skipping the read -- meaning an
-    // out-of-bounds conv tap was reading a real (wrong) pixel value there
-    // instead of the zero-padding the model was actually trained to
-    // expect. mac_valid itself is combinational and changes every cycle as
-    // mac_index advances, so it has to be pipelined through the same
-    // 2-cycle delay as map_din/weight_data to correctly gate the capture
-    // for the SAME tap it was computed for, not whatever tap mac_valid
-    // happens to show 2 cycles later.
+    // out-of-bounds taps need zero-padding, not address 0's real pixel --
+    // mac_valid is pipelined 2 cycles to line up with map_din's own latency.
     reg mac_valid_stage1, mac_valid_stage2;
 
     //========================================================
@@ -400,37 +379,14 @@ reg [4:0] channel_index; //keep count of current channel based on the CONV layer
 
                 FSM_IDLE: begin
 
-                    // conv_done must self-clear here every idle cycle --
-                    // same pattern classifier.v (fc_done) and
-                    // global_avg_pool.v (gap_done) already use in their own
-                    // FSM_IDLE. Without this, conv_done latches high after
-                    // CONV1 finishes and never returns to 0, so cnn_top's
-                    // `if(conv_done)` check in FSM_CONV2/FSM_CONV3 is true
-                    // on literally the first cycle of each state -- both
-                    // layers get skipped entirely (~0 real cycles) instead
-                    // of actually running, leaving feature map C all zeros,
-                    // which makes every FC output score tie at exactly 0
-                    // and the strict `>` argmax always default to index 0.
+                    // must self-clear every idle cycle, same as fc_done/gap_done,
+                    // or it latches high and cnn_top skips the next layer entirely.
                     conv_done <= 1'b0;
 
                     if (conv_en == 1'b1) begin
 
-                        // out_x/out_y/filter_index must reset here too --
-                        // they're only reset on global rst_n otherwise, so
-                        // CONV2/CONV3 previously started from CONV1's
-                        // leftover values (e.g. out_x=47,out_y=47 for
-                        // CONV1's 48-wide frame). Against CONV2's smaller
-                        // frame=24, that stale out_x/out_y immediately fails
-                        // its own bounds check in FSM_DONE while the stale
-                        // filter_index still passed, so the layer's
-                        // completion logic fired almost immediately and
-                        // skipped filters 0-7 of CONV2 entirely -- leaving
-                        // those feature-map-B channels permanently
-                        // unwritten (X in simulation), which propagates
-                        // into fc_result[] and makes the argmax's `>`
-                        // comparisons always evaluate false, so class_result
-                        // was stuck at its initial value of 0 regardless of
-                        // the real input image.
+                        // reset here too, not just on rst_n -- otherwise CONV2/CONV3
+                        // start from CONV1's leftover out_x/out_y/filter_index.
                         out_x <= 0;
                         out_y <= 0;
                         filter_index <= 0;
@@ -465,40 +421,14 @@ reg [4:0] channel_index; //keep count of current channel based on the CONV layer
                     result[2] <= 0;
                     result[3] <= 0;
 
-                    // mac_index/channel_index must reset here too -- they're
-                    // only reset when FSM_MAC advances pool_index WITHIN a
-                    // position (0->1->2->3), never when pool_index wraps
-                    // from 3 back to 0 for a brand NEW position. That left
-                    // pool_index=0 of every single (x,y) position starting
-                    // with mac_index stuck at its previous position's final
-                    // value (10) -- immediately failing its own
-                    // `mac_index<10` check and skipping straight to
-                    // FSM_MAC without ever capturing real tap data, so
-                    // mac_pixel_data[]/mac_weight[] still held garbage left
-                    // over from the PREVIOUS position's last pool_index=3
-                    // sub-window. Same issue for channel_index on
-                    // multi-channel layers (CONV2/CONV3): it'd start
-                    // already at num_channels-1 (inherited from the
-                    // previous position's last accumulate), immediately
-                    // satisfying the "last channel" exit condition after
-                    // just one real accumulate and skipping the rest.
-                    // Invisible on CONV1 specifically (num_channels=1, so
-                    // channel_index=0 is trivially always correct anyway),
-                    // which is exactly why this was still uncaught after
-                    // fixing the very similar out_x/out_y/filter_index bug.
+                    // reset here too -- otherwise a new (x,y) position inherits
+                    // mac_index/channel_index from the previous position's last
+                    // pool_index=3 sub-window instead of starting clean.
                     mac_index <= 0;
                     channel_index <= 0;
 
-                    // bias_reg capture moved into FSM_ADDR (see there) --
-                    // bias_addr can change on literally this same cycle
-                    // (right after filter_index advances in FSM_DONE), so
-                    // capturing bias_data here gives it zero settling time
-                    // against the real 2-cycle pROM latency, reading the
-                    // PREVIOUS filter's bias for the first position of
-                    // every new filter. Only matters once per filter (144
-                    // positions redundantly re-capture the same stable
-                    // address the rest of the time), but it's the same
-                    // root cause as the main fix, so worth doing right.
+                    // bias_reg is captured in FSM_ADDR instead of here -- bias_addr
+                    // can still be moving this same cycle, needs more settle time.
 
                     state <= FSM_ADDR;
 
@@ -518,24 +448,10 @@ reg [4:0] channel_index; //keep count of current channel based on the CONV layer
                     // map_din -- generic data in from addr being accessed
 
 
-                    // Real Gowin BRAM/pROM primitives for these specific
-                    // depths (not a power of 2) get split across multiple
-                    // physical blocks internally, muxed by an address-range
-                    // selector that's itself pushed through 2 cascaded
-                    // DFFEs to stay aligned with the underlying block's own
-                    // registered output -- verified directly against
-                    // Gowin's real GW2A simulation primitives (prim_sim.v):
-                    // both Gowin_SDPB (map_din) and Gowin_pROM_conv
-                    // (weight_data) take 2 full cycles from address-in to
-                    // valid-data-out, not 1. Skip the first TWO cycles here
-                    // (was 1) to match -- capturing 1 cycle early silently
-                    // read stale, one-address-behind data for every single
-                    // tap of every position.
+                    // Gowin_SDPB/Gowin_pROM_conv take 2 full cycles from address-in
+                    // to valid data-out (confirmed against prim_sim.v) -- skip the
+                    // first two mac_index values here so the capture below lines up.
 
-                    // pipeline mac_valid through the same 2-cycle delay as
-                    // map_din, so mac_valid_stage2 reflects validity for
-                    // the SAME tap map_din is now returning data for (see
-                    // mac_valid_stage1/2 declaration comment above)
                     mac_valid_stage1 <= mac_valid;
                     mac_valid_stage2 <= mac_valid_stage1;
 
@@ -546,10 +462,7 @@ reg [4:0] channel_index; //keep count of current channel based on the CONV layer
 
                     end
 
-                    // bias_addr became stable no later than FSM_COORD (1
-                    // cycle before this state), so by the time mac_index
-                    // reaches 2 here it's had >= 3 cycles to settle --
-                    // comfortably past the 2-cycle pROM latency.
+                    // bias_addr settled since FSM_COORD, has >=3 cycles by now
                     if (mac_index == 4'd2) begin
                         bias_reg <= bias_data;
                     end
@@ -625,24 +538,10 @@ reg [4:0] channel_index; //keep count of current channel based on the CONV layer
                 //============================================
                 FSM_RELU: begin
                     
-                    // ReLU
-
-// bias, THEN ReLU -- matches "conv then bias then
-                    // activation", and exactly what the Python model
-                    // (model_bias.py) computed during training.
-                    // Both ternary branches must be explicitly signed
-                    // (32'sd0, not 32'd0) -- mixing a signed and unsigned
-                    // branch makes Verilog treat the WHOLE conditional
-                    // expression as unsigned, which was reinterpreting a
-                    // negative bias_reg (e.g. -1) as its huge unsigned
-                    // equivalent (255) in the true-branch computation.
-                    // Empirically confirmed: filter 7's bias=-1 was adding
-                    // +255 instead of -1 to the raw accumulator, a +256
-                    // excess that exactly explained the corrupted output
-                    // (verified against a hand-computed reference before
-                    // and after this fix). Invisible for filter 0 earlier
-                    // in this same debug session only because its bias
-                    // happened to be exactly 0.
+                    // bias then ReLU, matches model_bias.py. Both ternary branches
+                    // must be 32'sd0 (signed) -- mixing signed/unsigned here made
+                    // Verilog treat the whole expression as unsigned, turning a
+                    // negative bias_reg into its huge unsigned equivalent.
                     result[0] <= (result[0] + bias_reg) < 32'sd0 ? 32'sd0 : (result[0] + bias_reg);
                     result[1] <= (result[1] + bias_reg) < 32'sd0 ? 32'sd0 : (result[1] + bias_reg);
                     result[2] <= (result[2] + bias_reg) < 32'sd0 ? 32'sd0 : (result[2] + bias_reg);
@@ -661,18 +560,9 @@ reg [4:0] channel_index; //keep count of current channel based on the CONV layer
                     //[ 3  7 ]
                     //[ 1  5 ]  →  7
 
-                    // Blocking assignments here are intentional -- same
-                    // reason as classifier.v's FSM_ARGMAX comparison chain:
-                    // each comparison must see the RESULT of the previous
-                    // comparison within this same cycle, not pool_result's
-                    // stale value from a PREVIOUS position's FSM_POOL. With
-                    // non-blocking assignment (the original bug), every
-                    // `if(resultN > pool_result)` compared against
-                    // whatever pool_result happened to hold from the last
-                    // time this state ran -- completely unrelated to
-                    // result[0..3] -- so the final pool_result was
-                    // essentially garbage whenever any of those stale
-                    // comparisons happened to come out true.
+                    // blocking assignment intentional here -- same as classifier.v's
+                    // FSM_ARGMAX, each comparison needs this cycle's running max,
+                    // not pool_result's stale value from the previous position.
 
                     pool_result = result[0];
 

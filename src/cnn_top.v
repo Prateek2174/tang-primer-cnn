@@ -2,20 +2,9 @@ module cnn_top
 (
     input rst_n,
     input pclk,
-    input frame_ready, // pulses/goes high once a full 96x96 frame has been
-                        // written into the resize BSRAM by the new UART
-                        // byte-assembly logic. Repurposed from the old
-                        // `vsync` (real-camera DVP signal) -- this pipeline
-                        // no longer has a camera, so wire this to whatever
-                        // "frame complete" signal that module produces.
-                        // Was previously triggered on vsync's FALLING edge
-                        // (end of the camera's blanking period); this
-                        // triggers on frame_ready's RISING edge instead
-                        // (start of a newly-completed frame). If your new
-                        // module drives frame_ready as a clean single-cycle
-                        // pulse, this still works correctly (a pulse has a
-                        // rising edge too) -- the edge-detect is kept as a
-                        // safety net in case it's a level instead.
+    input frame_ready, // pulses once a full 96x96 frame is written into the
+                        // resize BSRAM (uart_frame.v). Edge-detected below --
+                        // works whether this is a pulse or a level.
 
     output reg conv_en,
     output reg pool_en,
@@ -31,17 +20,9 @@ module cnn_top
 
     output reg [1:0] conv_layer_sel, //tie to weight_rom.v to find out the layer
 
-    output busy // high whenever a classification is in progress (anything
-                // but FSM_IDLE) -- lets uart_frame.v hold off starting a
-                // new frame capture while this one is still being read out
-                // of resize_bsram (mac_array's CONV1 stage). Without this,
-                // send_frames.py streams frames back-to-back with no gap,
-                // so the next frame's incoming bytes could start
-                // overwriting resize_bsram mid-CONV1, corrupting the
-                // in-progress classification with a mix of old and new
-                // pixel data -- same corruption pattern every cycle given
-                // fixed relative timing, which could show up as a stable
-                // but wrong classification instead of an obvious crash.
+    output busy // high during any classification (state != FSM_IDLE) -- lets
+                // uart_frame.v hold off a new frame while resize_bsram is
+                // still being read by CONV1
 
 );
 
@@ -170,14 +151,8 @@ module cnn_top
 
                     if(fc_done) begin
 
-                        // Used to go to FSM_UART and wait for uart_done here,
-                        // but that assumed a UART TX module that no longer
-                        // exists (uart.v is RX-only now, output is the LED
-                        // decoder instead). Nothing would ever drive
-                        // uart_done, so that state was a permanent deadlock
-                        // after the very first classification. Go straight
-                        // back to FSM_IDLE instead -- the LED decoder reads
-                        // class_result combinationally, no handshake needed.
+                        // no FSM_UART wait state -- class_result is read
+                        // combinationally by the LED decoder / uart_tx, no handshake needed
                         fc_en <= 1'b0;
                         state <= FSM_IDLE;
 

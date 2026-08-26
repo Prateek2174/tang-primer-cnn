@@ -6,12 +6,9 @@ module uart_frame
     input  [7:0] rx_data,
     input        rx_data_valid,
 
-    input        busy, // from cnn_top: high while a classification is in
-                        // progress. Holds this FSM at FR_SEARCH_1 and drops
-                        // any in-flight reception while busy, so a new
-                        // frame's incoming bytes can never overwrite
-                        // resize_bsram while mac_array's CONV1 stage is
-                        // still reading it for the previous frame.
+    input        busy, // from cnn_top: high during classification -- holds this
+                        // FSM at FR_SEARCH_1 so a new frame can't overwrite
+                        // resize_bsram mid-read
 
     output reg [13:0] resize_wr_addr,
     output reg [7:0]  resize_wr_data,
@@ -20,12 +17,10 @@ module uart_frame
 );
 
     //========================================================
-    // FRAME ASSEMBLY -- watches for the 0xAA 0x55 sync marker (see
-    // send_frames.py), then writes the next 9216 payload bytes into the
-    // 96x96 resize BSRAM, centering each pixel the same way
-    // preprocessor.v used to (y_data - 128). Replaces preprocessor.v's
-    // job entirely -- no DVP timing exists in this pipeline, images
-    // already arrive pre-resized to 96x96 from the PC.
+    // FRAME ASSEMBLY -- watches for the 0xAA 0x55 sync marker, writes the
+    // next 9216 payload bytes into the 96x96 resize BSRAM, centering each
+    // pixel (-128). Replaces preprocessor.v -- images already arrive
+    // resized to 96x96 from the PC.
     //========================================================
 
     localparam FR_SEARCH_1 = 2'd0; // waiting for first marker byte (0xAA)
@@ -54,11 +49,8 @@ module uart_frame
 
             if (busy) begin
 
-                // classification in progress -- hold at search state and
-                // drop any in-flight marker/payload reception. Safe: the
-                // sender keeps streaming new frames continuously, so the
-                // next valid marker will be picked up cleanly once busy
-                // clears instead of risking a corrupted mid-read overwrite.
+                // drop any in-flight reception while busy -- sender keeps
+                // streaming, next valid marker gets picked up once busy clears
                 fr_state   <= FR_SEARCH_1;
                 byte_count <= 0;
 

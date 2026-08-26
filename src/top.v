@@ -1,17 +1,11 @@
 module top
 (
-    input  wire clk,          // 27MHz raw board oscillator, no PLL needed
-                               // anymore -- the PLL in the old design only
-                               // ever derived the camera's XCLK, which
-                               // doesn't exist in this pipeline.
+    input  wire clk,          // 27MHz raw board oscillator, no PLL
     input  wire rst_n,        // active low
 
     input  wire uart_rx_pin,  // serial data in from PC (webcam frames)
-    output wire uart_tx_pin,  // serial data out to PC -- sends class_result
-                               // as a single byte once per completed
-                               // classification, for automated test
-                               // scripts to read back without needing a
-                               // human to check the LEDs each time
+    output wire uart_tx_pin,  // serial data out to PC -- class_result byte
+                               // per completed classification, for test scripts
 
     output wire led_0,        // one-hot classifier result, 0-5 fingers
     output wire led_1,
@@ -30,28 +24,22 @@ module top
 
     uart_rx #(
         .CLK_FRE   (27),      // matches the raw 27MHz oscillator on clk
-        .BAUD_RATE (115200)   // see project notes: 921600 doesn't leave
-                               // enough timing margin on this un-PLL'd
-                               // clock for uart_rx's single-sample (no
-                               // oversampling) bit timing.
+        .BAUD_RATE (115200)   // 921600 doesn't leave enough margin on this
+                               // un-PLL'd, non-oversampled RX
     ) uart_rx_1 (
         .clk           (clk),
         .rst_n         (rst_n),
         .rx_data       (rx_data),
         .rx_data_valid (rx_data_valid),
-        .rx_data_ready (1'b1),   // always ready -- our per-byte processing
-                                  // (marker compare / -128 / BSRAM write)
-                                  // easily keeps up with UART's byte rate
+        .rx_data_ready (1'b1),   // always ready, per-byte processing keeps up
         .rx_pin        (uart_rx_pin)
     );
 
     //========================================================
     // FRAME ASSEMBLY -- see uart_frame.v. Watches for the 0xAA 0x55 sync
-    // marker (send_frames.py), writes the next 9216 payload bytes into
-    // the 96x96 resize BSRAM, centering each pixel the same way
-    // preprocessor.v used to (y_data - 128). Replaces preprocessor.v's
-    // job entirely -- no DVP timing exists in this pipeline, images
-    // already arrive pre-resized to 96x96 from the PC.
+    // marker, writes 9216 payload bytes into the resize BSRAM, centering
+    // each pixel (-128). Replaces preprocessor.v -- images arrive already
+    // resized to 96x96 from the PC, no DVP timing needed.
     //========================================================
 
     wire        frame_ready;
@@ -75,16 +63,9 @@ module top
     );
 
     //========================================================
-    // 96x96 RESIZE BSRAM
+    // 96x96 RESIZE BSRAM -- Gowin_SDPB, depth 9216 width 8, one write port
+    // (frame assembly) one read port (mac_array). Single clock domain.
     //========================================================
-    // NEEDS GENERATING via IP Core Generator before this will synthesize
-    // -- same process as conv_prom/fc_prom. Simple dual-port pROM won't
-    // work here (this one needs real read+write, not just init-and-read),
-    // use Gowin_SDPB (Semi-Dual-Port BRAM): depth 9216, width 8, one
-    // write port (port A, this frame-assembly logic) and one read port
-    // (port B, mac_array). Single clock domain now (both clka/clkb = clk)
-    // -- the old design needed cam_pclk/clk cross-domain sync here, this
-    // pipeline doesn't since there's no separate camera clock anymore.
 
     wire [7:0]  resize_dout;
     wire [13:0] resize_addr;
@@ -121,13 +102,10 @@ module top
         .frame_ready (frame_ready),
 
         .conv_done (conv_done),
-        .pool_done (1'b0),      // vestigial port, unused -- pooling is
-                                 // folded into mac_array's own FSM, no
-                                 // separate pool stage ever existed
+        .pool_done (1'b0),      // vestigial, pooling is folded into mac_array's FSM
         .gap_done  (gap_done),
         .fc_done   (fc_done),
-        .uart_done (1'b0),      // vestigial -- see cnn_top.v's FSM_FC
-                                 // comment, output is LEDs now not UART TX
+        .uart_done (1'b0),      // vestigial, see cnn_top.v FSM_FC
 
         .conv_en (conv_en),
         .pool_en (),            // vestigial, unused
@@ -171,10 +149,8 @@ module top
     );
 
     //========================================================
-    // FEATURE MAP BSRAMs -- Feature map A (48x48x8, 18432B), B
-    // (24x24x16, 9216B), C (12x12x32, 4608B). NEED GENERATING via IP
-    // Core Generator (Gowin_SDPB_A/B/C, no init file needed -- these
-    // are scratch buffers written fresh every frame, not weight storage).
+    // FEATURE MAP BSRAMs -- A (48x48x8, 18432B), B (24x24x16, 9216B),
+    // C (12x12x32, 4608B). Gowin_SDPB_A/B/C, scratch buffers, no init file.
     //========================================================
 
     wire map_a_wr_en, map_b_wr_en, map_c_wr_en;
@@ -210,8 +186,7 @@ module top
 
         .map_a_rd_en (map_a_rd_en),
         .map_b_rd_en (map_b_rd_en),
-        .map_c_rd_en (),   // unused -- mac_array never reads feature map C,
-                           // only global_avg_pool does (see its own connection below)
+        .map_c_rd_en (),   // unused -- only global_avg_pool reads feature map C
 
         .map_a_din (map_a_din),
         .map_b_din (map_b_din),
@@ -227,12 +202,8 @@ module top
 
         .map_a_rd_addr (map_a_rd_addr),
         .map_b_rd_addr (map_b_rd_addr),
-        .map_c_rd_addr (),   // unused -- same reason as map_c_rd_en above,
-                             // mac_array never reads feature map C. Leaving
-                             // this wired to the shared net (like map_c_rd_en
-                             // correctly isn't) caused a real multi-driver
-                             // conflict with global_avg_pool's own drive of
-                             // map_c_rd_addr.
+        .map_c_rd_addr (),   // unused, same as map_c_rd_en -- wiring this caused
+                             // a multi-driver conflict with global_avg_pool
 
         .weight_data (weight_data),
         .conv_addr   (conv_addr),
@@ -327,14 +298,8 @@ module top
     );
 
     //========================================================
-    // UART TX -- sends class_result back to the PC as a single byte
-    // whenever a classification completes, for automated test scripts.
-    // fc_done is already a clean single-cycle pulse (set once in
-    // classifier.v's FSM_ARGMAX, cleared every cycle in FSM_IDLE), safe to
-    // use directly as tx_data_valid -- classifications happen roughly once
-    // per second, vastly longer than a single byte's ~87us transmission
-    // time at 115200 baud, so uart_tx is always idle by the time the next
-    // fc_done arrives.
+    // UART TX -- sends class_result as one byte per completed classification.
+    // fc_done is a clean single-cycle pulse, safe to use as tx_data_valid.
     //========================================================
 
     wire [7:0] tx_data = {5'd0, class_result};

@@ -1,8 +1,5 @@
 // Sourced from sipeed/TangPrimer-20K-example (UART/UART_HELLO/src/uart_tx.v),
-// unchanged except CLK_FRE's default (50 -> 27, matching this project's raw
-// 27MHz board oscillator, no PLL -- same convention as uart_rx.v's own
-// CLK_FRE=27 instantiation in top.v). BAUD_RATE stays 115200 to match
-// uart_rx.v and send_one_image.py's read side.
+// CLK_FRE default changed 50 -> 27 to match this board's raw oscillator.
 
 module uart_tx
 #(

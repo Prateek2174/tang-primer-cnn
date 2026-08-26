@@ -80,13 +80,8 @@ module global_avg_pool
 
                 FSM_GATHER: begin
 
-                    // 2-cycle BSRAM latency (verified against Gowin's real
-                    // GW2A simulation primitives -- feature_map_c's
-                    // non-power-of-2 depth splits it across multiple
-                    // physical blocks internally, giving a real 2-cycle
-                    // address-to-data latency, not 1): skip the first TWO
-                    // cycles since map_c_dout doesn't correspond to this
-                    // pixel_index's address yet.
+                    // skip first 2 cycles -- map_c_dout doesn't correspond to
+                    // this pixel_index's address yet (2-cycle BSRAM latency)
 
                     if (pixel_index > 1) begin
                         acc <= acc + map_c_dout;

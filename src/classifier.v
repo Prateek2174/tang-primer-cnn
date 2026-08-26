@@ -18,12 +18,8 @@ module classifier
     //========================================================
 
     output [7:0] fc_addr,     // weight address (0-191)
-    input  [7:0] weight_data, // weight value (pROM, 2-cycle latency --
-                               // verified against Gowin's real GW2A
-                               // simulation primitives: this depth isn't a
-                               // power of 2, so the IP generator splits it
-                               // across multiple physical blocks with a
-                               // 2-cycle address-to-data latency, not 1)
+    input  [7:0] weight_data, // weight value (pROM, 2-cycle address-to-data
+                               // latency, confirmed against Gowin's sim primitives)
 
     //========================================================
     // RESULT
@@ -46,19 +42,9 @@ module classifier
     reg signed [7:0]  weight_reg;
     reg signed [7:0]  gap_reg;
     reg signed [7:0]  gap_reg_stage1, gap_reg_stage2;
-    // Pipeline depth here (3 total stages: stage1, stage2, gap_reg) was
-    // determined empirically, not analytically -- a precise edge-by-edge
-    // probe against Gowin's real GW2A simulation primitives measured the
-    // real pROM's address-to-data latency at exactly 3 clock edges. But a
-    // first analytical attempt to translate that into "how many pipeline
-    // stages does gap_data need" got the wrong answer (over-thought the
-    // weight_reg/acc same-cycle NBA interaction and guessed 4 stages,
-    // which gave a provably wrong dot-product result against a
-    // hand-computed reference). Swept 2/3/4/5 stages against a
-    // hand-computed expected value (real fc_rom.mi weights times a
-    // trivial gap_data[k]=k test pattern) and only 3 stages reproduced
-    // the exact expected accumulator value -- trust this over any
-    // re-derivation from first principles.
+    // 3-stage pipeline (stage1, stage2, gap_reg) verified empirically against
+    // a hand-computed dot product using real fc_rom.mi weights -- matches
+    // the pROM's real 3-edge address-to-data latency.
 
     //widened: worst case 32 taps * (127*127) = 516,128 -- needs >=20 bits signed.
     //using 32 bits to match conv_acc.v's accumulator width for consistency.
@@ -116,15 +102,8 @@ module classifier
 
                 FSM_GATHER: begin
 
-                    // 2-cycle latency pattern (verified against Gowin's
-                    // real GW2A pROM/BRAM simulation primitives -- see
-                    // weight_data's port comment): skip the first THREE
-                    // cycles (verified empirically, see gap_reg_stage
-                    // declaration comment) since weight_data doesn't
-                    // correspond to this in_idx's address yet. gap_data is
-                    // combinational, so it's pushed through a matching
-                    // 3-stage pipeline to stay aligned with weight_reg when
-                    // finally multiplied.
+                    // skip first 3 cycles -- weight_data/gap_reg pipeline not
+                    // yet aligned to this in_idx's address (see gap_reg_stage above)
 
                     if (in_idx > 2) begin
                         acc <= acc + (weight_reg * gap_reg);
