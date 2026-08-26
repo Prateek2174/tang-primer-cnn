@@ -1,0 +1,32 @@
+<?xml version="1" encoding="UTF-8"?>
+<!DOCTYPE gowin-fpga-project>
+<Project>
+    <Template>FPGA</Template>
+    <Version>5</Version>
+    <Device name="GW2A-18C" pn="GW2A-LV18PG256C8/I7">gw2a18c-011</Device>
+    <FileList>
+        <File path="src/cam_line_buffer_30rows.v" type="file.verilog" enable="1"/>
+        <File path="src/classifier.v" type="file.verilog" enable="1"/>
+        <File path="src/cnn_top.v" type="file.verilog" enable="1"/>
+        <File path="src/conv_acc.v" type="file.verilog" enable="1"/>
+        <File path="src/global_avg_pool.v" type="file.verilog" enable="1"/>
+        <File path="src/gowin_prom/gowin_prom_bias.v" type="file.verilog" enable="1"/>
+        <File path="src/gowin_prom/gowin_prom_conv.v" type="file.verilog" enable="1"/>
+        <File path="src/gowin_prom/gowin_prom_fc.v" type="file.verilog" enable="1"/>
+        <File path="src/gowin_sdpb/gowin_sdpb.v" type="file.verilog" enable="1"/>
+        <File path="src/gowin_sdpb/gowin_sdpb_a.v" type="file.verilog" enable="1"/>
+        <File path="src/gowin_sdpb/gowin_sdpb_b.v" type="file.verilog" enable="1"/>
+        <File path="src/gowin_sdpb/gowin_sdpb_c.v" type="file.verilog" enable="1"/>
+        <File path="src/mac_array.v" type="file.verilog" enable="1"/>
+        <File path="src/pool.v" type="file.verilog" enable="1"/>
+        <File path="src/preprocessor.v" type="file.verilog" enable="1"/>
+        <File path="src/relu.v" type="file.verilog" enable="1"/>
+        <File path="src/top.v" type="file.verilog" enable="1"/>
+        <File path="src/uart.v" type="file.verilog" enable="1"/>
+        <File path="src/uart_frame.v" type="file.verilog" enable="1"/>
+        <File path="src/uart_tx.v" type="file.verilog" enable="1"/>
+        <File path="src/weight_rom.v" type="file.verilog" enable="1"/>
+        <File path="src/top.cst" type="file.cst" enable="1"/>
+        <File path="src/top.sdc" type="file.sdc" enable="1"/>
+    </FileList>
+</Project>

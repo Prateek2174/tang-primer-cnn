@@ -1,0 +1,97 @@
+//Physical Constraints file
+//Part Number: GW2A-LV18PG256C8/I7
+//Device: GW2A-18
+//
+// Pin locations sourced from sipeed/TangPrimer-20K-example on GitHub,
+// carried over from the earlier camera-based build:
+//   - clk/rst_n: Cam2HDMI and UART_HELLO examples disagreed on both the
+//     voltage for clk (2.5V vs 3.3V) and the physical pin for rst_n
+//     (T10 vs T5). Went with Cam2HDMI's values (2.5V / T10). If clk
+//     fails to meet timing or Gowin flags a bank conflict, re-check
+//     against the Dock schematic (Tang_Primer_20K_Dock-3713 or -3714,
+//     whichever board you actually have) before assuming these are wrong.
+//   - uart_rx_pin: T13, confirmed via Gowin's own pin/package viewer
+//     (labeled "uart_rx"). 3.3V chosen to match what a typical USB-UART
+//     adapter's TX line drives -- re-check if nothing comes through.
+//
+// led_0..led_5 all confirmed against the Dock-3713 schematic (led_0=C13,
+// led_1=A13 sourced earlier; led_2=N16, led_3=N14, led_4=L14, led_5=L16
+// added later once the schematic was checked directly).
+//
+// OV5640 camera pins removed -- this pipeline gets images from the PC
+// over UART instead of a camera (see send_frames.py). uart_tx_pin was
+// also removed early on (output was LED-only) but later added back to
+// send class_result back to the PC for automated testing.
+//
+// NOT YET FILLED IN -- confirm before synthesizing:
+//   - btn pin location, if you add one
+
+//========================================================
+// SYSTEM CLOCK / RESET
+//========================================================
+
+// rst_n corrected back to T10 -- confirmed as THE documented Primer 20K
+// reset pin per sipeed/TangPrimer-20K-example's own README ("Tang Primer
+// 20K Dock pin constrain" -> "Reset pin": "The reset pin on primer 20K is
+// T10"). An earlier fix mistakenly moved this to T5 by copying UART_HELLO's
+// own .cst file directly without cross-checking the README's actual pin
+// table -- T5 was apparently just that one example's own non-standard
+// jumper setup, not the board's real reset button (confirmed stuck-low on
+// real hardware via a direct rst_n-readout LED test). T10 needs "release
+// SSPI pins for regular IO" enabled in Project -> Configuration ->
+// Dual-Purpose Pin (its dedicated function is SSPI, separate from the MSPI
+// external-flash auto-boot function) before this will place successfully.
+// Kept PULL_MODE=UP (vs the original PULL_MODE=NONE) since a pushbutton
+// reset with no pull resistor can float, which was worth fixing regardless
+// of which pin is correct. clk's LVCMOS33 (vs the original LVCMOS25) is
+// kept too -- empirically confirmed working via a free-running-counter LED
+// test on real hardware (clean, correctly-paced blink), so no reason to
+// revert that one.
+IO_LOC  "clk"    H11;
+IO_PORT "clk"    IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+
+IO_LOC  "rst_n"  T10;
+IO_PORT "rst_n"  IO_TYPE=LVCMOS33 PULL_MODE=UP BANK_VCCIO=3.3;
+
+//========================================================
+// UART RX -- webcam frames in from the PC (send_frames.py)
+//========================================================
+
+IO_LOC  "uart_rx_pin" T13;
+IO_PORT "uart_rx_pin" IO_TYPE=LVCMOS33 PULL_MODE=NONE BANK_VCCIO=3.3;
+
+//========================================================
+// UART TX -- class_result byte back to the PC, for automated test
+// scripts. M11, matching the same sipeed/TangPrimer-20K-example README
+// pin table already verified correct for uart_rx (T13) and rst_n (T10).
+//========================================================
+
+IO_LOC  "uart_tx_pin" M11;
+IO_PORT "uart_tx_pin" IO_TYPE=LVCMOS33 PULL_MODE=UP DRIVE=8 BANK_VCCIO=3.3;
+
+//========================================================
+// RESULT OUTPUT -- one-hot LED decoder, class_result 0-5
+//========================================================
+
+// C13 is the dedicated DONE pin -- enable "Use DONE as regular IO" in
+// Project -> Configuration -> Dual-Purpose Pin before this will place
+// successfully (same fix pattern as SSPI for rst_n).
+IO_LOC  "led_0" C13;
+IO_PORT "led_0" IO_TYPE=LVCMOS33 PULL_MODE=NONE DRIVE=8 BANK_VCCIO=3.3;
+
+// A13 is the dedicated READY pin -- enable "Use READY as regular IO" in
+// Configuration -> Dual-Purpose Pin before this will place successfully.
+IO_LOC  "led_1" A13;
+IO_PORT "led_1" IO_TYPE=LVCMOS33 PULL_MODE=NONE DRIVE=8 BANK_VCCIO=3.3;
+
+IO_LOC  "led_2" N16;
+IO_PORT "led_2" IO_TYPE=LVCMOS33 PULL_MODE=NONE DRIVE=8 BANK_VCCIO=3.3;
+
+IO_LOC  "led_3" N14;
+IO_PORT "led_3" IO_TYPE=LVCMOS33 PULL_MODE=NONE DRIVE=8 BANK_VCCIO=3.3;
+
+IO_LOC  "led_4" L14;
+IO_PORT "led_4" IO_TYPE=LVCMOS33 PULL_MODE=NONE DRIVE=8 BANK_VCCIO=3.3;
+
+IO_LOC  "led_5" L16;
+IO_PORT "led_5" IO_TYPE=LVCMOS33 PULL_MODE=NONE DRIVE=8 BANK_VCCIO=3.3;

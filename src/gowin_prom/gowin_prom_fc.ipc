@@ -1,0 +1,15 @@
+[General]
+ipc_version=4
+file=gowin_prom_fc
+module=Gowin_pROM_fc
+target_device=gw2a18c-011
+type=ram_prom
+version=1.0
+
+[Config]
+DEPTH=192
+LANG=0
+MEM_FILE=C:\\Users\\prate\\Downloads\\cnn_training\\weights_bias\\fc_rom.mi
+READ=1
+RESET_MODE=true
+WIDTH=8
